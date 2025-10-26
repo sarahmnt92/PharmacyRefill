@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام حجز مواعيد إعادة صرف الأدوية</title>
     <style>
         * {
@@ -371,9 +371,9 @@
         </header>
         
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab(event,'booking')">📋 نموذج الحجز</button>
-            <button class="tab-btn" onclick="switchTab(event,'tracking')">🔍 تتبع الطلب</button>
-            <button class="tab-btn" onclick="switchTab(event,'admin')">🔒 لوحة الإدارة</button>
+            <button class="tab-btn active" onclick="switchTab('booking')">📋 نموذج الحجز</button>
+            <button class="tab-btn" onclick="switchTab('tracking')">🔍 تتبع الطلب</button>
+            <button class="tab-btn" onclick="switchTab('admin')">🔒 لوحة الإدارة</button>
         </div>
         
         <!-- نموذج الحجز -->
@@ -386,7 +386,7 @@
             
             <div id="bookingMessage" class="message"></div>
             
-            <form id="bookingForm">
+            <form onsubmit="submitBooking(event)">
                 <div class="grid-2">
                     <div class="form-group">
                         <label>رقم الهوية *</label>
@@ -426,7 +426,7 @@
             <div id="trackingMessage" class="message"></div>
             <div id="trackingResult"></div>
             
-            <form id="trackingForm">
+            <form onsubmit="trackBooking(event)">
                 <div class="grid-2">
                     <div class="form-group">
                         <label>رقم الهوية *</label>
@@ -448,7 +448,7 @@
             
             <div id="adminLogin" class="admin-login">
                 <div id="adminMessage" class="message"></div>
-                <form id="adminForm">
+                <form onsubmit="adminLogin(event)">
                     <div class="form-group">
                         <label>كلمة المرور *</label>
                         <input type="password" id="adminPassword" placeholder="أدخل كلمة المرور" required>
@@ -471,41 +471,27 @@
         </footer>
     </div>
     
-    <script type="module">
-        /**********************************************************************
-         * Firebase setup (Firestore)
-         * --------------------------
-         * ضع بيانات firebaseConfig الخاصة بمشروعك هنا — استخدمتِ سابقاً
-         * بياناتك، يمكن إدراجها كما هي أدناه.
-         *
-         * ملاحظة: تضمين مفاتيح Firebase في كود الواجهة الأمامية طبيعي
-         * (مفتاح الـ API الخاص بـ Firebase ليس سريًا بالمعنى التقليدي)
-         * لأن قواعد الأمان في Firestore هي ما يحمي البيانات. تأكدي من
-         * ضبط قواعد Firestore المناسبة عندما تنتقلين للإنتاج.
-         **********************************************************************/
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import {
-            getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc,
-            query, where, orderBy
-        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        
-        // --- ضع هنا firebaseConfig التي أرسلتِها سابقًا ---
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
+    
+    <script>
+        // Firebase Configuration
         const firebaseConfig = {
-          apiKey: "AIzaSyAhIp9CnEgptjBO4oM_xaZhsuqaSsufn-k",
-          authDomain: "pharmacybooking-c7cd6.firebaseapp.com",
-          projectId: "pharmacybooking-c7cd6",
-          storageBucket: "pharmacybooking-c7cd6.firebasestorage.app",
-          messagingSenderId: "297721612359",
-          appId: "1:297721612359:web:03dc37f4d1fc07eac24962",
-          measurementId: "G-0X83TNS1Z1"
+            apiKey: "AIzaSyAhIp9CnEgptjBO4oM_xaZhsuqaSsufn-k",
+            authDomain: "pharmacybooking-c7cd6.firebaseapp.com",
+            projectId: "pharmacybooking-c7cd6",
+            storageBucket: "pharmacybooking-c7cd6.firebasestorage.app",
+            messagingSenderId: "297721612359",
+            appId: "1:297721612359:web:03dc37f4d1fc07eac24962",
+            databaseURL: "https://pharmacybooking-c7cd6-default-rtdb.firebaseio.com"
         };
         
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
         
-        /**********************************************************************
-         * وظائف مساعدة لعرض التاريخ (احتفظت بالكود الأصلي لتحويل التاريخ)
-         **********************************************************************/
+        // دالة تحويل التاريخ الميلادي إلى هجري
         function gregorianToHijri(date) {
             const d = new Date(date);
             const jd = Math.floor((d / 86400000) - (d.getTimezoneOffset() / 1440) + 2440587.5);
@@ -527,6 +513,7 @@
             return { day: hijriDay, month: hijriMonth, year: hijriYear };
         }
         
+        // دالة تنسيق التاريخ
         function formatDate(dateStr) {
             if (!dateStr) return '';
             const date = new Date(dateStr + 'T00:00:00');
@@ -537,13 +524,38 @@
             return `${gregorianDate} / ${hijriDate}`;
         }
         
-        /**********************************************************************
-         * الإعدادات العامة والمتغيرات
-         **********************************************************************/
         const ADMIN_PASSWORD = '10551055';
+        let bookings = [];
         let isAdminAuthenticated = false;
         
-        // Helper: عرض رسالة قصيرة
+        // تحميل البيانات من Firebase عند فتح الصفحة
+        database.ref('bookings').on('value', (snapshot) => {
+            if (snapshot.exists()) {
+                bookings = Object.values(snapshot.val());
+            } else {
+                bookings = [];
+            }
+        });
+        
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load admin panel if needed
+            if (tabName === 'admin' && isAdminAuthenticated) {
+                loadAdminPanel();
+            }
+        }
+        
         function showMessage(elementId, message, type) {
             const msgElement = document.getElementById(elementId);
             msgElement.textContent = message;
@@ -553,28 +565,7 @@
             }, 5000);
         }
         
-        // تبديل تبويبات (نفس السلوك القديم)
-        function switchTab(evt, tabName) {
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            document.getElementById(tabName).classList.add('active');
-            evt.currentTarget.classList.add('active');
-            
-            if (tabName === 'admin' && isAdminAuthenticated) {
-                loadAdminPanel();
-            }
-        }
-        
-        /**********************************************************************
-         * إرسال حجز (الآن إلى Firestore بدلاً من localStorage)
-         **********************************************************************/
-        const bookingForm = document.getElementById('bookingForm');
-        bookingForm.addEventListener('submit', async function(event) {
+        function submitBooking(event) {
             event.preventDefault();
             
             const nationalId = document.getElementById('nationalId').value.trim();
@@ -583,24 +574,32 @@
             const appointmentDate = document.getElementById('appointmentDate').value;
             const notes = document.getElementById('notes').value.trim();
             
-            if (!nationalId || nationalId.length !== 10 || !/^\d{10}$/.test(nationalId)) {
+            if (!nationalId || nationalId.length !== 10) {
                 showMessage('bookingMessage', 'رقم الهوية يجب أن يكون بالضبط 10 أرقام', 'error');
                 return;
             }
+            if (!/^\d{10}$/.test(nationalId)) {
+                showMessage('bookingMessage', 'رقم الهوية يجب أن يحتوي على أرقام فقط', 'error');
+                return;
+            }
+            
             if (!patientName) {
                 showMessage('bookingMessage', 'الرجاء إدخال اسم المريض', 'error');
                 return;
             }
+            
             if (!phoneNumber) {
                 showMessage('bookingMessage', 'الرجاء إدخال رقم الهاتف', 'error');
                 return;
             }
+            
             if (!appointmentDate) {
                 showMessage('bookingMessage', 'الرجاء اختيار تاريخ الموعد', 'error');
                 return;
             }
             
             const booking = {
+                id: Date.now(),
                 nationalId,
                 patientName,
                 phoneNumber,
@@ -611,99 +610,88 @@
                 submittedAt: new Date().toISOString()
             };
             
-            try {
-                // حفظ في Firestore داخل collection اسمها "bookings"
-                await addDoc(collection(db, 'bookings'), booking);
+            // حفظ البيانات في Firebase
+            database.ref('bookings/' + booking.id).set(booking).then(() => {
+                bookings.push(booking);
+            
                 showMessage('bookingMessage', 'تم تسجيل موعدك بنجاح! سنقوم بتجهيز أدويتك قبل الموعد.', 'success');
-                bookingForm.reset();
-            } catch (err) {
-                console.error('Firestore add error:', err);
-                showMessage('bookingMessage', 'حدث خطأ أثناء حفظ الحجز. حاول لاحقاً.', 'error');
-            }
-        });
+                
+                // Reset form
+                document.querySelector('form').reset();
+            }).catch((error) => {
+                showMessage('bookingMessage', 'حدث خطأ أثناء تسجيل الموعد: ' + error.message, 'error');
+            });
+        }
         
-        /**********************************************************************
-         * تتبع الحجز — بحث في Firestore حسب رقم الهوية ورقم الهاتف
-         **********************************************************************/
-        const trackingForm = document.getElementById('trackingForm');
-        trackingForm.addEventListener('submit', async function(event) {
+        function trackBooking(event) {
             event.preventDefault();
+            
             const nationalId = document.getElementById('trackNationalId').value.trim();
             const phoneNumber = document.getElementById('trackPhoneNumber').value.trim();
+            
+            const booking = bookings.find(b => 
+                b.nationalId === nationalId && b.phoneNumber === phoneNumber
+            );
+            
             const resultDiv = document.getElementById('trackingResult');
             
-            if (!nationalId || !phoneNumber) {
-                showMessage('trackingMessage', 'أدخل رقم الهوية ورقم الهاتف للبحث', 'error');
+            if (!booking) {
+                showMessage('trackingMessage', 'لم يتم العثور على حجز بهذه البيانات', 'error');
                 resultDiv.innerHTML = '';
                 return;
             }
             
-            try {
-                const q = query(collection(db, 'bookings'),
-                                where('nationalId', '==', nationalId),
-                                where('phoneNumber', '==', phoneNumber));
-                const snap = await getDocs(q);
-                if (snap.empty) {
-                    showMessage('trackingMessage', 'لم يتم العثور على حجز بهذه البيانات', 'error');
-                    resultDiv.innerHTML = '';
-                    return;
-                }
-                
-                // نأخذ أول مطابقة
-                const docSnap = snap.docs[0];
-                const booking = { id: docSnap.id, ...docSnap.data() };
-                const statusText = { pending: 'قيد الانتظار', completed: 'تم الصرف', rejected: 'مرفوض' };
-                const statusClass = booking.status;
-                
-                resultDiv.innerHTML = `
-                    <div class="booking-item ${statusClass}" style="margin-top: 20px;">
-                        <div class="booking-header">
-                            <span class="status-badge ${statusClass}">${statusText[booking.status]}</span>
-                            <div class="booking-name">${booking.patientName}</div>
-                        </div>
-                        <div class="booking-info">
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">رقم الهوية:</span>
-                                ${booking.nationalId}
-                            </div>
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">رقم الهاتف:</span>
-                                ${booking.phoneNumber}
-                            </div>
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">تاريخ الموعد:</span>
-                                ${formatDate(booking.appointmentDate)}
-                            </div>
-                            ${booking.notes ? `
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">ملاحظات:</span>
-                                ${booking.notes}
-                            </div>
-                            ` : ''}
-                            ${booking.status === 'rejected' ? `
-                            <div class="booking-info-item" style="grid-column: 1/-1; color: #dc3545;">
-                                <span class="booking-info-label">سبب الرفض:</span>
-                                ${booking.rejectionReason || 'أكملت عدد مرات التعبئة أو ليس لديك أمر تعبئة. لابد من زيارة العيادة'}
-                            </div>
-                            ` : ''}
-                        </div>
+            const statusText = {
+                pending: 'قيد الانتظار',
+                completed: 'تم الصرف',
+                rejected: 'مرفوض'
+            };
+            
+            const statusClass = booking.status;
+            
+            resultDiv.innerHTML = `
+                <div class="booking-item ${statusClass}" style="margin-top: 20px;">
+                    <div class="booking-header">
+                        <span class="status-badge ${statusClass}">${statusText[booking.status]}</span>
+                        <div class="booking-name">${booking.patientName}</div>
                     </div>
-                `;
-                showMessage('trackingMessage', 'تم العثور على حجزك', 'success');
-            } catch (err) {
-                console.error('Tracking error:', err);
-                showMessage('trackingMessage', 'حدث خطأ أثناء البحث', 'error');
-                resultDiv.innerHTML = '';
-            }
-        });
+                    <div class="booking-info">
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">رقم الهوية:</span>
+                            ${booking.nationalId}
+                        </div>
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">رقم الهاتف:</span>
+                            ${booking.phoneNumber}
+                        </div>
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">تاريخ الموعد:</span>
+                            ${formatDate(booking.appointmentDate)}
+                        </div>
+                        ${booking.notes ? `
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">ملاحظات:</span>
+                            ${booking.notes}
+                        </div>
+                        ` : ''}
+                        ${booking.status === 'rejected' ? `
+                        <div class="booking-info-item" style="grid-column: 1/-1; color: #dc3545;">
+                            <span class="booking-info-label">سبب الرفض:</span>
+                            ${booking.rejectionReason || 'أكملت عدد مرات التعبئة أو ليس لديك أمر تعبئة. لابد من زيارة العيادة'}
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            showMessage('trackingMessage', 'تم العثور على حجزك', 'success');
+        }
         
-        /**********************************************************************
-         * لوحة الإدارة: تسجيل دخول بكلمة المرور وتحميل الحجوزات من Firestore
-         **********************************************************************/
-        const adminForm = document.getElementById('adminForm');
-        adminForm.addEventListener('submit', function(event) {
+        function adminLogin(event) {
             event.preventDefault();
+            
             const password = document.getElementById('adminPassword').value;
+            
             if (password === ADMIN_PASSWORD) {
                 isAdminAuthenticated = true;
                 document.getElementById('adminLogin').style.display = 'none';
@@ -713,7 +701,7 @@
                 showMessage('adminMessage', 'كلمة المرور غير صحيحة', 'error');
                 document.getElementById('adminPassword').value = '';
             }
-        });
+        }
         
         function adminLogout() {
             isAdminAuthenticated = false;
@@ -722,168 +710,91 @@
             document.getElementById('adminPassword').value = '';
         }
         
-        async function loadAdminPanel() {
+        function loadAdminPanel() {
             const listDiv = document.getElementById('bookingsList');
-            listDiv.innerHTML = '<p style="text-align:center;color:#999;">جارِ تحميل الحجوزات...</p>';
-            try {
-                // نجلب الحجوزات مرتبة حسب appointmentDate من الأقدم إلى الأحدث
-                const q = query(collection(db, 'bookings'), orderBy('appointmentDate', 'asc'));
-                const snap = await getDocs(q);
-                const bookings = [];
-                snap.forEach(d => bookings.push({ id: d.id, ...d.data() }));
-                
-                if (bookings.length === 0) {
-                    listDiv.innerHTML = '<p style="text-align: center; color: #999;">لا توجد حجوزات حالياً</p>';
-                    return;
-                }
-                
-                listDiv.innerHTML = bookings.map(booking => `
-                    <div class="booking-item ${booking.status}">
-                        <div class="booking-header">
-                            <span class="status-badge ${booking.status}">
-                                ${booking.status === 'pending' ? 'قيد الانتظار' : 
-                                  booking.status === 'completed' ? 'تم الصرف' : 'مرفوض'}
-                            </span>
-                            <div class="booking-name">${booking.patientName}</div>
-                        </div>
-                        <div class="booking-info">
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">رقم الهوية:</span>
-                                ${booking.nationalId}
-                            </div>
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">رقم الهاتف:</span>
-                                ${booking.phoneNumber}
-                            </div>
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">تاريخ الموعد:</span>
-                                ${formatDate(booking.appointmentDate)}
-                            </div>
-                            ${booking.notes ? `
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">ملاحظات:</span>
-                                ${booking.notes}
-                            </div>
-                            ` : ''}
-                            ${booking.status === 'rejected' ? `
-                            <div class="booking-info-item" style="grid-column: 1/-1; color: #dc3545;">
-                                <span class="booking-info-label">سبب الرفض:</span>
-                                ${booking.rejectionReason || 'أكملت عدد مرات التعبئة أو ليس لديك أمر تعبئة. لابد من زيارة العيادة'}
-                            </div>
-                            ` : ''}
-                        </div>
-                        <div class="booking-actions">
-                            <button class="btn-pending" onclick="updateStatus('${'${booking.id}'}','pending')" data-id="${'${booking.id}'}">قيد الانتظار</button>
-                            <button class="btn-completed" onclick="updateStatus('${'${booking.id}'}','completed')" data-id="${'${booking.id}'}">تم الصرف</button>
-                            <button class="btn-rejected" onclick="updateStatus('${'${booking.id}'}','rejected')" data-id="${'${booking.id}'}">رفض</button>
-                            <button class="btn-delete" onclick="deleteBooking('${'${booking.id}'}')">حذف</button>
-                        </div>
+            
+            if (bookings.length === 0) {
+                listDiv.innerHTML = '<p style="text-align: center; color: #999;">لا توجد حجوزات حالياً</p>';
+                return;
+            }
+            
+            const sorted = [...bookings].sort((a, b) => 
+                new Date(a.appointmentDate) - new Date(b.appointmentDate)
+            );
+            
+            listDiv.innerHTML = sorted.map(booking => `
+                <div class="booking-item ${booking.status}">
+                    <div class="booking-header">
+                        <span class="status-badge ${booking.status}">
+                            ${booking.status === 'pending' ? 'قيد الانتظار' : 
+                              booking.status === 'completed' ? 'تم الصرف' : 'مرفوض'}
+                        </span>
+                        <div class="booking-name">${booking.patientName}</div>
                     </div>
-                `).join('');
-                
-                // ملاحظة: لأننا ندرج html كسلاسل نصية، استبدال onclick داخل map أعلاه سيتضمن الـ id الصحيح.
-                // ولكن لتفادي مشاكل الاقتباس، سنبني DOM بدلاً من الاعتماد على تلك السلاسل عند الحاجة.
-                
-                // إعادة بناء DOM بشكل آمن مع الأحداث
-                const container = listDiv;
-                container.innerHTML = '';
-                bookings.forEach(b => {
-                    const el = document.createElement('div');
-                    el.className = `booking-item ${b.status}`;
-                    el.innerHTML = `
-                        <div class="booking-header">
-                            <span class="status-badge ${b.status}">
-                                ${b.status === 'pending' ? 'قيد الانتظار' : b.status === 'completed' ? 'تم الصرف' : 'مرفوض'}
-                            </span>
-                            <div class="booking-name">${b.patientName}</div>
+                    <div class="booking-info">
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">رقم الهوية:</span>
+                            ${booking.nationalId}
                         </div>
-                        <div class="booking-info">
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">رقم الهوية:</span>
-                                ${b.nationalId}
-                            </div>
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">رقم الهاتف:</span>
-                                ${b.phoneNumber}
-                            </div>
-                            <div class="booking-info-item">
-                                <span class="booking-info-label">تاريخ الموعد:</span>
-                                ${formatDate(b.appointmentDate)}
-                            </div>
-                            ${b.notes ? `<div class="booking-info-item"><span class="booking-info-label">ملاحظات:</span>${b.notes}</div>` : ''}
-                            ${b.status === 'rejected' ? `<div class="booking-info-item" style="grid-column:1/-1;color:#dc3545;"><span class="booking-info-label">سبب الرفض:</span>${b.rejectionReason || 'أكملت عدد مرات التعبئة أو ليس لديك أمر تعبئة. لابد من زيارة العيادة'}</div>` : ''}
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">رقم الهاتف:</span>
+                            ${booking.phoneNumber}
                         </div>
-                    `;
-                    
-                    const actions = document.createElement('div');
-                    actions.className = 'booking-actions';
-                    
-                    const btnPending = document.createElement('button');
-                    btnPending.className = 'btn-pending';
-                    btnPending.textContent = 'قيد الانتظار';
-                    btnPending.addEventListener('click', () => updateStatus(b.id, 'pending'));
-                    
-                    const btnCompleted = document.createElement('button');
-                    btnCompleted.className = 'btn-completed';
-                    btnCompleted.textContent = 'تم الصرف';
-                    btnCompleted.addEventListener('click', () => updateStatus(b.id, 'completed'));
-                    
-                    const btnRejected = document.createElement('button');
-                    btnRejected.className = 'btn-rejected';
-                    btnRejected.textContent = 'رفض';
-                    btnRejected.addEventListener('click', () => updateStatus(b.id, 'rejected'));
-                    
-                    const btnDelete = document.createElement('button');
-                    btnDelete.className = 'btn-delete';
-                    btnDelete.textContent = 'حذف';
-                    btnDelete.addEventListener('click', () => deleteBooking(b.id));
-                    
-                    actions.appendChild(btnPending);
-                    actions.appendChild(btnCompleted);
-                    actions.appendChild(btnRejected);
-                    actions.appendChild(btnDelete);
-                    
-                    el.appendChild(actions);
-                    container.appendChild(el);
-                });
-                
-            } catch (err) {
-                console.error('Error loading bookings:', err);
-                listDiv.innerHTML = '<p style="text-align:center;color:#999;">حدث خطأ أثناء تحميل الحجوزات</p>';
-            }
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">تاريخ الموعد:</span>
+                            ${formatDate(booking.appointmentDate)}
+                        </div>
+                        ${booking.notes ? `
+                        <div class="booking-info-item">
+                            <span class="booking-info-label">ملاحظات:</span>
+                            ${booking.notes}
+                        </div>
+                        ` : ''}
+                        ${booking.status === 'rejected' ? `
+                        <div class="booking-info-item" style="grid-column: 1/-1; color: #dc3545;">
+                            <span class="booking-info-label">سبب الرفض:</span>
+                            ${booking.rejectionReason || 'أكملت عدد مرات التعبئة أو ليس لديك أمر تعبئة. لابد من زيارة العيادة'}
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="booking-actions">
+                        <button class="btn-pending" onclick="updateStatus(${booking.id}, 'pending')">قيد الانتظار</button>
+                        <button class="btn-completed" onclick="updateStatus(${booking.id}, 'completed')">تم الصرف</button>
+                        <button class="btn-rejected" onclick="updateStatus(${booking.id}, 'rejected')">رفض</button>
+                        <button class="btn-delete" onclick="deleteBooking(${booking.id})">حذف</button>
+                    </div>
+                </div>
+            `).join('');
         }
         
-        /**********************************************************************
-         * تحديث الحالة (يتم حفظ التغيير في Firestore)
-         **********************************************************************/
-        async function updateStatus(id, status) {
-            try {
-                const ref = doc(db, 'bookings', id);
-                const updateObj = { status };
+        function updateStatus(id, status) {
+            const booking = bookings.find(b => b.id === id);
+            if (booking) {
+                booking.status = status;
                 if (status === 'rejected') {
-                    updateObj.rejectionReason = 'أكملت عدد مرات التعبئة أو ليس لديك أمر تعبئة. لابد من زيارة العيادة';
-                } else {
-                    updateObj.rejectionReason = '';
+                    booking.rejectionReason = 'أكملت عدد مرات التعبئة أو ليس لديك أمر تعبئة. لابد من زيارة العيادة';
                 }
-                await updateDoc(ref, updateObj);
-                loadAdminPanel();
-            } catch (err) {
-                console.error('Update status error:', err);
-                showMessage('adminMessage', 'فشل تحديث الحالة', 'error');
+                // تحديث Firebase
+                database.ref('bookings/' + id).update({
+                    status: booking.status,
+                    rejectionReason: booking.rejectionReason || ''
+                }).then(() => {
+                    loadAdminPanel();
+                }).catch((error) => {
+                    alert('حدث خطأ: ' + error.message);
+                });
             }
         }
         
-        /**********************************************************************
-         * حذف حجز
-         **********************************************************************/
-        async function deleteBooking(id) {
-            if (!confirm('هل أنت متأكد من حذف هذا الحجز؟')) return;
-            try {
-                await deleteDoc(doc(db, 'bookings', id));
-                loadAdminPanel();
-            } catch (err) {
-                console.error('Delete error:', err);
-                showMessage('adminMessage', 'فشل حذف الحجز', 'error');
+        function deleteBooking(id) {
+            if (confirm('هل أنت متأكد من حذف هذا الحجز؟')) {
+                // حذف من Firebase
+                database.ref('bookings/' + id).remove().then(() => {
+                    bookings = bookings.filter(b => b.id !== id);
+                    loadAdminPanel();
+                }).catch((error) => {
+                    alert('حدث خطأ: ' + error.message);
+                });
             }
         }
     </script>
