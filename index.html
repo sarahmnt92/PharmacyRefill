@@ -529,13 +529,16 @@
         let isAdminAuthenticated = false;
         
         // تحميل البيانات من Firebase عند فتح الصفحة
-        database.ref('bookings').on('value', (snapshot) => {
-            if (snapshot.exists()) {
-                bookings = Object.values(snapshot.val());
-            } else {
-                bookings = [];
-            }
-        });
+        // انتظر قليلاً للتأكد من تحميل Firebase بشكل صحيح
+        setTimeout(() => {
+            database.ref('bookings').on('value', (snapshot) => {
+                if (snapshot.exists()) {
+                    bookings = Object.values(snapshot.val());
+                } else {
+                    bookings = [];
+                }
+            });
+        }, 1000);
         
         function switchTab(tabName) {
             // Hide all tabs
@@ -611,16 +614,22 @@
             };
             
             // حفظ البيانات في Firebase
-            database.ref('bookings/' + booking.id).set(booking).then(() => {
-                bookings.push(booking);
-            
-                showMessage('bookingMessage', 'تم تسجيل موعدك بنجاح! سنقوم بتجهيز أدويتك قبل الموعد.', 'success');
-                
-                // Reset form
-                document.querySelector('form').reset();
-            }).catch((error) => {
-                showMessage('bookingMessage', 'حدث خطأ أثناء تسجيل الموعد: ' + error.message, 'error');
-            });
+            try {
+                database.ref('bookings/' + booking.id).set(booking).then(() => {
+                    showMessage('bookingMessage', 'تم تسجيل موعدك بنجاح! سنقوم بتجهيز أدويتك قبل الموعد.', 'success');
+                    
+                    // Reset form
+                    document.getElementById('nationalId').value = '';
+                    document.getElementById('patientName').value = '';
+                    document.getElementById('phoneNumber').value = '';
+                    document.getElementById('appointmentDate').value = '';
+                    document.getElementById('notes').value = '';
+                }).catch((error) => {
+                    showMessage('bookingMessage', 'حدث خطأ أثناء تسجيل الموعد: ' + error.message, 'error');
+                });
+            } catch (error) {
+                showMessage('bookingMessage', 'خطأ في الاتصال: ' + error.message, 'error');
+            }
         }
         
         function trackBooking(event) {
